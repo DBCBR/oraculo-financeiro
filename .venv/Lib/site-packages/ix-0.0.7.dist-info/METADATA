@@ -1,0 +1,71 @@
+Metadata-Version: 2.4
+Name: ix
+Version: 0.0.7
+Summary: Audio Utils
+Home-page: https://github.com/cavart/ix
+License: apache-2.0
+Platform: any
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
+# ix
+Audio Utils
+
+To install:	```pip install ix```
+
+## Description
+The `ix` package provides a collection of utilities for audio processing, particularly focusing on voice and music analysis and synthesis. It includes functions for spectral analysis, voice activity detection, formant estimation, and audio compression using various techniques like LPC (Linear Predictive Coding), MDCT (Modified Discrete Cosine Transform), and more.
+
+## Main Features
+- **Voice Activity Detection (VAD)**: Detects voiced and unvoiced segments in an audio signal.
+- **Spectral Analysis**: Functions for computing the Short-Time Fourier Transform (STFT) and its inverse, as well as other spectral transformations.
+- **Formant Analysis**: Estimation of formant frequencies using LPC coefficients.
+- **Audio Compression**: Implements DCT-based audio compression and decompression.
+- **Pitch Tracking**: Implements the Harvest algorithm for robust pitch tracking.
+- **Feature Extraction**: Converts speech waveforms to mel-generalized cepstral coefficients (MGC), which are useful in voice synthesis.
+- **Audio Synthesis**: Reconstructs audio from spectral and cepstral representations.
+
+## Usage Examples
+
+### Voice Activity Detection
+```python
+from ix import ltsd_vad
+fs, audio = wavfile.read('path_to_audio.wav')
+vad_audio, vad_segments = ltsd_vad(audio, fs)
+```
+
+### Spectral Analysis
+```python
+from ix import stft, istft
+fs, audio = wavfile.read('path_to_audio.wav')
+spectrogram = stft(audio, fftsize=512)
+reconstructed_audio = istft(spectrogram, fftsize=512)
+```
+
+### Pitch Tracking
+```python
+from ix import harvest
+fs, audio = wavfile.read('path_to_audio.wav')
+temporal_positions, f0, vuv, f0_candidates = harvest(audio, fs)
+```
+
+### Feature Extraction
+```python
+from ix import sp2mgc
+fs, audio = wavfile.read('path_to_audio.wav')
+spectrogram = stft(audio, fftsize=1024)
+mgc_coefficients = sp2mgc(spectrogram, order=20, alpha=0.35, gamma=-0.41)
+```
+
+### Audio Synthesis
+```python
+from ix import world_synthesis
+fs, audio = wavfile.read('path_to_audio.wav')
+temporal_positions, f0, vuv, f0_candidates = harvest(audio, fs)
+temporal_positions, spectrogram, fs = cheaptrick(audio, fs, temporal_positions, f0, vuv)
+synthesized_audio = world_synthesis(f0, vuv, spectrogram, fs)
+```
+
+## Documentation
+Each function in the `ix` package includes a detailed docstring with an explanation of its parameters, return values, and an example of how to use it. For further details, refer to the docstrings in the source code.
