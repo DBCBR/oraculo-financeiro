@@ -8,199 +8,204 @@ import sqlite3
 from datetime import datetime
 from dotenv import load_dotenv
 
-# --- 1. CONFIGURAÇÃO E AMBIENTE ---
+# --- 1. CONFIGURAÇÃO INICIAL ---
+st.set_page_config(page_title="Simulador Estratégico Pro", page_icon="🏛️", layout="wide")
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_KEY"))
 MODELO_IA = "gemini-2.5-flash"
 
 # --- 2. BANCO DE DADOS (SQL) ---
 def init_db():
-    """Cria a tabela no banco se ela não existir (Setup Inicial)"""
-    conn = sqlite3.connect('historico_simulacoes.db')
+    conn = sqlite3.connect('historico.db')
     c = conn.cursor()
-    # Linguagem SQL pura aqui dentro:
     c.execute('''
         CREATE TABLE IF NOT EXISTS simulacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data_hora TEXT,
-            valor_investido REAL,
+            data TEXT,
+            valor REAL,
             perfil TEXT,
-            selic_dia REAL,
-            recomendacao_ia TEXT
+            selic REAL,
+            analise TEXT
         )
     ''')
     conn.commit()
     conn.close()
 
-def salvar_execucao(valor, perfil, selic, ia_text):
-    """O Escriba: Grava o que aconteceu no banco"""
-    conn = sqlite3.connect('historico_simulacoes.db')
+def salvar_no_banco(valor, perfil, selic, analise):
+    conn = sqlite3.connect('historico.db')
     c = conn.cursor()
-    data_agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    c.execute('''
-        INSERT INTO simulacoes (data_hora, valor_investido, perfil, selic_dia, recomendacao_ia)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (data_agora, valor, perfil, selic, ia_text))
-    
+    data = datetime.now().strftime("%d/%m/%Y %H:%M")
+    c.execute('INSERT INTO simulacoes (data, valor, perfil, selic, analise) VALUES (?, ?, ?, ?, ?)', 
+              (data, valor, perfil, selic, analise))
     conn.commit()
     conn.close()
 
-def carregar_historico():
-    """O Historiador: Lê tudo o que está gravado"""
-    conn = sqlite3.connect('historico_simulacoes.db')
+def ler_banco():
+    conn = sqlite3.connect('historico.db')
     df = pd.read_sql_query("SELECT * FROM simulacoes ORDER BY id DESC", conn)
     conn.close()
     return df
 
-# Inicializa o banco assim que o app liga
 init_db()
 
-# --- 3. MOTOR DE DADOS (API) ---
+# --- 3. DADOS DE MERCADO (API) ---
 @st.cache_data(ttl=3600)
-def buscar_dados_mercado():
+def buscar_mercado():
     try:
         url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
-        resposta = requests.get(url)
-        selic = float(resposta.json()[0]['valor'])
+        selic = float(requests.get(url).json()[0]['valor'])
     except:
-        selic = 11.25 
-
+        selic = 11.25 # Fallback
+    
     cdi = selic - 0.10
+    # Inteligência de Mercado para setar os Sliders
     if selic > 10:
-        media_lci = 88 
-        media_cdb = 105 
+        lci_padrao, cdb_padrao = 88, 105
     else:
-        media_lci = 92
-        media_cdb = 110
+        lci_padrao, cdb_padrao = 92, 110
         
-    return {"selic": selic, "cdi": cdi, "lci_padrao": media_lci, "cdb_padrao": media_cdb}
+    return {"selic": selic, "cdi": cdi, "lci_def": lci_padrao, "cdb_def": cdb_padrao}
 
-# --- 4. CÁLCULOS ---
-CONCEITOS = {
-    "Selic": "Taxa mãe da economia. Define o piso de rentabilidade.",
-    "LCI/LCA": "Isento de IR. Foco em Imóveis/Agro.",
-    "CDB": "Empréstimo bancário. Tem IR mas paga mais bruto."
-}
+dados = buscar_mercado()
 
-def calcular_imposto_renda(dias):
+# --- 4. MOTOR DE CÁLCULO ---
+def calcular_ir(dias):
     if dias <= 180: return 22.5
     elif dias <= 360: return 20.0
     elif dias <= 720: return 17.5
     else: return 15.0
 
-def simular_cenarios(valor, dados_mercado, taxa_lci_user, taxa_cdb_user):
-    resultados = []
-    anos = [1, 2, 3, 4, 5]
-    selic = dados_mercado['selic']
-    cdi = dados_mercado['cdi']
-    
-    for ano in anos:
+def simular(valor, selic, cdi, tx_lci, tx_cdb):
+    res = []
+    for ano in [1, 2, 3, 4, 5]:
         dias = ano * 365
-        aliquota_ir = calcular_imposto_renda(dias)
+        ir = calcular_ir(dias)
         
-        bruto_selic = valor * ((1 + (selic/100)) ** ano)
-        lucro_selic = bruto_selic - valor
-        taxa_b3 = bruto_selic * 0.002 * ano
-        liq_selic = bruto_selic - (lucro_selic * (aliquota_ir/100)) - taxa_b3
+        # Tesouro Selic
+        bruto_sel = valor * ((1 + (selic/100))**ano)
+        liq_sel = bruto_sel - ((bruto_sel-valor)*(ir/100)) - (bruto_sel*0.002*ano)
         
-        taxa_efetiva_lci = cdi * (taxa_lci_user / 100)
-        liq_lci = valor * ((1 + (taxa_efetiva_lci/100)) ** ano)
+        # LCI
+        liq_lci = valor * ((1 + (cdi*(tx_lci/100)/100))**ano)
         
-        taxa_efetiva_cdb = cdi * (taxa_cdb_user / 100)
-        bruto_cdb = valor * ((1 + (taxa_efetiva_cdb/100)) ** ano)
-        lucro_cdb = bruto_cdb - valor
-        liq_cdb = bruto_cdb - (lucro_cdb * (aliquota_ir/100))
+        # CDB
+        bruto_cdb = valor * ((1 + (cdi*(tx_cdb/100)/100))**ano)
+        liq_cdb = bruto_cdb - ((bruto_cdb-valor)*(ir/100))
         
-        resultados.append({
+        res.append({
             "Prazo (Anos)": ano,
-            "Tesouro Selic": round(liq_selic, 2),
-            f"LCI ({taxa_lci_user}%)": round(liq_lci, 2),
-            f"CDB ({taxa_cdb_user}%)": round(liq_cdb, 2)
+            "Tesouro Selic": round(liq_sel, 2),
+            "LCI/LCA": round(liq_lci, 2),
+            "CDB Banco": round(liq_cdb, 2)
         })
-    return pd.DataFrame(resultados)
+    return pd.DataFrame(res)
 
-def gerar_analise_ia(df, perfil):
-    txt = df.to_string(index=False)
-    contexto = "Priorize SEGURANÇA" if perfil == "Conservador" else "Priorize RETORNO"
-    
-    prompt = f"""
-    Você é um Consultor Financeiro Sênior.
-    Tabela Líquida: {txt}
-    Perfil: {perfil} ({contexto})
-    Compare LCI vs CDB matematicamente e recomende a alocação.
-    REGRAS: Sem LaTeX, sem cifrão solto. Use "R$ " com espaço. Seja breve.
-    """
+def consultar_ia(df, perfil):
     try:
+        txt = df.to_string(index=False)
+        prompt = f"""
+        Sou consultor financeiro. Cliente perfil: {perfil}.
+        Tabela de retornos líquidos:
+        {txt}
+        
+        Responda: Qual a melhor alocação matemática (LCI vs CDB)?
+        Regra: NÃO use LaTeX. NÃO use $. Use "R$ ". Seja direto.
+        """
         model = genai.GenerativeModel(MODELO_IA)
-        resp = model.generate_content(prompt).text
-        return resp.replace("$", "\\$")
+        return model.generate_content(prompt).text.replace("$", "\\$")
     except:
-        return "IA Indisponível."
+        return "IA em manutenção."
 
-# --- 5. INTERFACE ---
-st.set_page_config(page_title="Simulador SQL", page_icon="💾", layout="wide")
+# --- 5. INTERFACE (FRONTEND) ---
 
-# --- ÁREA ADMIN (SECRET) ---
-# Só aparece se clicar na checkbox na barra lateral
+# --- BARRA LATERAL (Sidebar) ---
 with st.sidebar:
-    st.header("⚙️ Configurações")
-    modo_admin = st.checkbox("Modo Administrativo (Ver Banco)")
+    st.header("🏛️ Painel de Controle")
+    
+    # Métricas de Mercado (Visual Bonito)
+    col_s1, col_s2 = st.columns(2)
+    col_s1.metric("Selic", f"{dados['selic']}%")
+    col_s2.metric("CDI", f"{dados['cdi']:.2f}%")
     
     st.divider()
-    dados = buscar_dados_mercado()
-    st.markdown(f"Selic: `{dados['selic']}%`")
+    
+    # Área Admin Discreta
+    st.caption("Área do Analista")
+    modo_admin = st.toggle("Ativar Modo Admin 🔐")
+
+# --- LÓGICA DE EXIBIÇÃO ---
 
 if modo_admin:
-    st.title("🗄️ Banco de Dados do Oráculo")
-    st.warning("Área restrita a analistas.")
+    # === TELA DO ADMIN ===
+    st.title("🗄️ Database Administrator")
+    st.markdown("Monitoramento de simulações realizadas pelos usuários.")
     
-    df_hist = carregar_historico()
+    df_db = ler_banco()
     
-    # Métricas do Negócio
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Total de Simulações", len(df_hist))
-    if not df_hist.empty:
-        media_inv = df_hist['valor_investido'].mean()
-        col_b.metric("Ticket Médio", f"R$ {media_inv:,.2f}")
-        perfil_top = df_hist['perfil'].mode()[0]
-        col_c.metric("Perfil + Comum", perfil_top)
+    if not df_db.empty:
+        # Dashboard Admin
+        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1.metric("Total Simulações", len(df_db))
+        kpi2.metric("Ticket Médio", f"R$ {df_db['valor'].mean():,.2f}")
+        kpi3.metric("Perfil Dominante", df_db['perfil'].mode()[0])
         
-        st.dataframe(df_hist, use_container_width=True)
-        
-        # Botão para baixar o banco em Excel
-        st.download_button("Baixar Dados em CSV", df_hist.to_csv(), "dados_oraculo.csv")
+        st.dataframe(df_db, use_container_width=True, hide_index=True)
+        st.download_button("📥 Exportar Excel/CSV", df_db.to_csv(), "dados_clientes.csv")
     else:
-        st.info("Nenhuma simulação feita ainda.")
+        st.info("Banco de dados vazio.")
+
+else:
+    # === TELA DO USUÁRIO (Simulador Bonito) ===
+    st.title("💼 Simulador Estratégico de Renda Fixa")
+    st.markdown(f"**Análise Inteligente com IA Generativa** | Baseado na Selic de {dados['selic']}%")
     
-    st.stop() # Para de carregar o resto do site se estiver no modo admin
+    # Layout Pro: Coluna de Configuração (Esquerda) e Coluna de Resultado (Direita)
+    col_input, col_result = st.columns([1, 1.5], gap="large")
+    
+    with col_input:
+        st.subheader("1. Configure o Aporte")
+        valor = st.number_input("Valor do Investimento (R$)", value=10000.0, step=1000.0)
+        perfil = st.selectbox("Seu Perfil de Risco", ["Conservador", "Moderado", "Arrojado"])
+        
+        st.divider()
+        st.subheader("2. Taxas Encontradas")
+        st.caption("Ajuste conforme as ofertas do seu banco/corretora:")
+        
+        tx_lci = st.slider("LCI/LCA (% CDI)", 80, 100, dados['lci_def'], help="Isento de IR. Geralmente paga menos % do CDI.")
+        tx_cdb = st.slider("CDB (% CDI)", 90, 140, dados['cdb_def'], help="Tem IR. Precisa pagar mais % do CDI para valer a pena.")
+        
+        calcular = st.button("🚀 Executar Simulação", type="primary", use_container_width=True)
 
-# --- ÁREA PÚBLICA (SIMULADOR) ---
-st.title("💰 Simulador de Renda Fixa (Com Histórico)")
-
-c1, c2 = st.columns([1, 2])
-
-with c1:
-    valor = st.number_input("Valor (R$)", 10000.0, step=1000.0)
-    perfil = st.selectbox("Perfil", ["Conservador", "Moderado", "Arrojado"])
-    taxa_lci = st.slider("LCI %", 80, 100, dados['lci_padrao'])
-    taxa_cdb = st.slider("CDB %", 90, 150, dados['cdb_padrao'])
-    btn = st.button("Simular", type="primary")
-
-with c2:
-    if btn:
-        with st.spinner("Calculando e salvando no banco..."):
-            df = simular_cenarios(valor, dados, taxa_lci, taxa_cdb)
-            
-            # Gráfico
-            df_melt = df.melt('Prazo (Anos)', var_name='Ativo', value_name='Valor')
-            fig = px.line(df_melt, x="Prazo (Anos)", y="Valor", color='Ativo')
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # IA
-            analise = gerar_analise_ia(df, perfil)
-            st.info(analise)
-            
-            # SALVAR NO BANCO (O Pulo do Gato)
-            salvar_execucao(valor, perfil, dados['selic'], analise)
-            st.toast("Simulação salva no banco de dados!", icon="💾")
+    with col_result:
+        if calcular:
+            with st.spinner("Processando cenários e salvando no banco..."):
+                # 1. Calcular
+                df_res = simular(valor, dados['selic'], dados['cdi'], tx_lci, tx_cdb)
+                
+                # 2. IA
+                analise = consultar_ia(df_res, perfil)
+                
+                # 3. Salvar no Banco (Invisível ao usuário)
+                salvar_no_banco(valor, perfil, dados['selic'], analise)
+                
+                # 4. Exibir Resultados
+                st.success("✅ Análise Concluída com Sucesso!")
+                
+                # Abas para organizar a informação (Visual Limpo)
+                tab1, tab2, tab3 = st.tabs(["📈 Gráfico", "📋 Tabela", "🤖 Parecer IA"])
+                
+                with tab1:
+                    df_melt = df_res.melt('Prazo (Anos)', var_name='Ativo', value_name='Valor')
+                    fig = px.line(df_melt, x='Prazo (Anos)', y='Valor', color='Ativo', markers=True, template='plotly_white')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with tab2:
+                    st.dataframe(df_res, use_container_width=True, hide_index=True)
+                    
+                with tab3:
+                    st.markdown(f"### Recomendações do Consultor")
+                    st.info(analise)
+        
+        else:
+            # Estado Inicial (Placeholder bonito)
+            st.info("👈 Preencha os dados ao lado para ver a projeção de crescimento do seu patrimônio.")
