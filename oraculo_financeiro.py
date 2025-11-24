@@ -8,13 +8,13 @@ import sqlite3
 from datetime import datetime
 from dotenv import load_dotenv
 
-# --- 1. CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Simulador Estratégico Pro", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURAÇÃO VISUAL (LAYOUT WIDE) ---
+st.set_page_config(page_title="Simulador Pro SQL", page_icon="🏛️", layout="wide")
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_KEY"))
 MODELO_IA = "gemini-2.5-flash"
 
-# --- 2. BANCO DE DADOS (SQL) ---
+# --- 2. BANCO DE DADOS (SQL) - MANTIDO ---
 def init_db():
     conn = sqlite3.connect('historico.db')
     c = conn.cursor()
@@ -46,6 +46,7 @@ def ler_banco():
     conn.close()
     return df
 
+# Inicializa o banco ao abrir
 init_db()
 
 # --- 3. DADOS DE MERCADO (API) ---
@@ -116,20 +117,18 @@ def consultar_ia(df, perfil):
     except:
         return "IA em manutenção."
 
-# --- 5. INTERFACE (FRONTEND) ---
+# --- 5. INTERFACE (FRONTEND PRO) ---
 
-# --- BARRA LATERAL (Sidebar) ---
+# --- BARRA LATERAL (Sidebar Bonita) ---
 with st.sidebar:
     st.header("🏛️ Painel de Controle")
     
-    # Métricas de Mercado (Visual Bonito)
+    # Métricas Visuais (Muito melhor que texto puro)
     col_s1, col_s2 = st.columns(2)
     col_s1.metric("Selic", f"{dados['selic']}%")
     col_s2.metric("CDI", f"{dados['cdi']:.2f}%")
     
     st.divider()
-    
-    # Área Admin Discreta
     st.caption("Área do Analista")
     modo_admin = st.toggle("Ativar Modo Admin 🔐")
 
@@ -138,28 +137,28 @@ with st.sidebar:
 if modo_admin:
     # === TELA DO ADMIN ===
     st.title("🗄️ Database Administrator")
-    st.markdown("Monitoramento de simulações realizadas pelos usuários.")
+    st.markdown("Monitoramento de simulações em tempo real.")
     
     df_db = ler_banco()
     
     if not df_db.empty:
-        # Dashboard Admin
+        # Dashboard Admin com KPIs
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Total Simulações", len(df_db))
         kpi2.metric("Ticket Médio", f"R$ {df_db['valor'].mean():,.2f}")
-        kpi3.metric("Perfil Dominante", df_db['perfil'].mode()[0])
+        kpi3.metric("Perfil Principal", df_db['perfil'].mode()[0])
         
         st.dataframe(df_db, use_container_width=True, hide_index=True)
-        st.download_button("📥 Exportar Excel/CSV", df_db.to_csv(), "dados_clientes.csv")
+        st.download_button("📥 Baixar Dados (CSV)", df_db.to_csv(), "historico.csv")
     else:
         st.info("Banco de dados vazio.")
 
 else:
-    # === TELA DO USUÁRIO (Simulador Bonito) ===
+    # === TELA DO USUÁRIO (Layout Pro) ===
     st.title("💼 Simulador Estratégico de Renda Fixa")
-    st.markdown(f"**Análise Inteligente com IA Generativa** | Baseado na Selic de {dados['selic']}%")
+    st.markdown(f"**Análise Inteligente com IA** | Baseado na Selic de {dados['selic']}%")
     
-    # Layout Pro: Coluna de Configuração (Esquerda) e Coluna de Resultado (Direita)
+    # Layout Pro: Duas Colunas bem divididas
     col_input, col_result = st.columns([1, 1.5], gap="large")
     
     with col_input:
@@ -168,11 +167,10 @@ else:
         perfil = st.selectbox("Seu Perfil de Risco", ["Conservador", "Moderado", "Arrojado"])
         
         st.divider()
-        st.subheader("2. Taxas Encontradas")
-        st.caption("Ajuste conforme as ofertas do seu banco/corretora:")
+        st.subheader("2. Taxas de Mercado")
         
-        tx_lci = st.slider("LCI/LCA (% CDI)", 80, 100, dados['lci_def'], help="Isento de IR. Geralmente paga menos % do CDI.")
-        tx_cdb = st.slider("CDB (% CDI)", 90, 140, dados['cdb_def'], help="Tem IR. Precisa pagar mais % do CDI para valer a pena.")
+        tx_lci = st.slider("LCI/LCA (% CDI)", 80, 100, dados['lci_def'])
+        tx_cdb = st.slider("CDB (% CDI)", 90, 140, dados['cdb_def'])
         
         calcular = st.button("🚀 Executar Simulação", type="primary", use_container_width=True)
 
@@ -185,13 +183,12 @@ else:
                 # 2. IA
                 analise = consultar_ia(df_res, perfil)
                 
-                # 3. Salvar no Banco (Invisível ao usuário)
+                # 3. Salvar (SQL)
                 salvar_no_banco(valor, perfil, dados['selic'], analise)
                 
-                # 4. Exibir Resultados
-                st.success("✅ Análise Concluída com Sucesso!")
+                # 4. Exibir Resultados com ABAS (O Visual Clean)
+                st.success("✅ Análise Concluída e Salva!")
                 
-                # Abas para organizar a informação (Visual Limpo)
                 tab1, tab2, tab3 = st.tabs(["📈 Gráfico", "📋 Tabela", "🤖 Parecer IA"])
                 
                 with tab1:
@@ -203,9 +200,7 @@ else:
                     st.dataframe(df_res, use_container_width=True, hide_index=True)
                     
                 with tab3:
-                    st.markdown(f"### Recomendações do Consultor")
                     st.info(analise)
         
         else:
-            # Estado Inicial (Placeholder bonito)
-            st.info("👈 Preencha os dados ao lado para ver a projeção de crescimento do seu patrimônio.")
+            st.info("👈 Preencha os dados para simular.")
