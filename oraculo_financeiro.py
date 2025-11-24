@@ -193,7 +193,7 @@ def pagina_dashboard():
         dados_banco = ofertas[banco_sel]
         st.info(f"📢 {dados_banco['Obs']}")
         
-        valor = st.number_input("Valor (R$)", 10000.0, step=1000.0)
+        valor = st.number_input("Valor (R$)", 1.0, step=100.0)
         
         st.divider()
         st.subheader("2. Taxas")
