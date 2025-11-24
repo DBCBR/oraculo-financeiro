@@ -14,7 +14,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_KEY"))
 MODELO_IA = "gemini-2.5-flash"
 
-# --- 2. BANCO DE DADOS (SQL) ---
+# --- 2. BANCO DE DADOS (SQL) - A NOVIDADE INVISÍVEL ---
 def init_db():
     conn = sqlite3.connect('historico.db')
     c = conn.cursor()
@@ -46,7 +46,7 @@ def ler_banco():
     conn.close()
     return df
 
-# Inicia o banco ao carregar
+# Inicializa o banco ao carregar a página
 init_db()
 
 # --- 3. MOTOR DE DADOS (INTEGRAÇÃO) ---
@@ -152,7 +152,7 @@ def gerar_analise_ia(df, perfil):
     except:
         return "IA Indisponível."
 
-# --- 6. INTERFACE (STREAMLIT) ---
+# --- 6. INTERFACE (MANTENDO O LAYOUT QUE VOCÊ GOSTA) ---
 
 # Sidebar
 dados = buscar_dados_mercado()
@@ -164,7 +164,7 @@ with st.sidebar:
     st.success("Dados atualizados via Banco Central.")
     st.divider()
     
-    # --- NOVIDADE: MODO ADMIN ---
+    # --- A ÚNICA MUDANÇA NA SIDEBAR: MODO ADMIN ---
     st.caption("Área do Analista")
     modo_admin = st.toggle("Modo Admin (Ver Banco) 🔐")
     
@@ -172,31 +172,27 @@ with st.sidebar:
     st.caption("Desenvolvido por David Barcellos Cardoso")
 
 
-# LÓGICA DE EXIBIÇÃO: ADMIN OU USUÁRIO
+# LÓGICA: ADMIN OU USUÁRIO (LAYOUT ORIGINAL)
 if modo_admin:
-    # === TELA DO ADMIN ===
+    # === TELA SECRETA DO ADMIN ===
     st.title("🗄️ Database Administrator")
-    st.markdown("Monitoramento de simulações em tempo real.")
+    st.markdown("Monitoramento de simulações.")
     
     df_db = ler_banco()
     
     if not df_db.empty:
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric("Total Simulações", len(df_db))
-        kpi2.metric("Ticket Médio", f"R$ {df_db['valor'].mean():,.2f}")
-        kpi3.metric("Perfil Principal", df_db['perfil'].mode()[0] if not df_db['perfil'].empty else "N/A")
-        
-        st.dataframe(df_db, use_container_width=True, hide_index=True)
+        st.metric("Total Simulações", len(df_db))
+        st.dataframe(df_db, use_container_width=True)
         st.download_button("📥 Baixar CSV", df_db.to_csv(), "historico.csv")
     else:
-        st.info("Banco de dados vazio.")
+        st.info("Banco vazio.")
 
 else:
-    # === TELA DO USUÁRIO (SEU LAYOUT PREFERIDO) ===
+    # === TELA DO USUÁRIO (SEU LAYOUT PREFERIDO INTACTO) ===
     st.title("💰 Simulador Estratégico de Renda Fixa")
     st.markdown("Descubra se vale mais a pena pagar imposto no CDB ou pegar a isenção da LCI.")
 
-    col1, col2 = st.columns([1, 2]) # MANTIDO O LAYOUT [1, 2]
+    col1, col2 = st.columns([1, 2])
 
     with col1:
         st.subheader("1. Seus Dados")
@@ -234,7 +230,7 @@ else:
                 analise = gerar_analise_ia(df, perfil)
                 st.markdown(analise)
                 
-                # --- NOVIDADE: SALVAR NO BANCO ---
+                # --- SALVAR NO BANCO (INVISÍVEL) ---
                 salvar_no_banco(valor, perfil, dados['selic'], analise)
                 
         else:
