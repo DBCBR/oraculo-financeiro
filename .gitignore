@@ -1,1 +1,38 @@
+# Variáveis de ambiente
 .env
+.env.local
+
+# Ambientes virtuais Python
+.venv/
+venv/
+ENV/
+env/
+
+# Cache e bytecode Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Arquivos de dados e planilhas (sensíveis ou locais)
+*.xlsx
+*.xls
+*.csv
+*.json
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Arquivos de log e temporários
+*.log
+*.tmp
+*.bak
+*.temp
+
+# Arquivos do sistema
+Thumbs.db
